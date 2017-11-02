@@ -127,7 +127,7 @@ class DataFeed():
             
             if self.inside_order_books[msg['product_id']] != inside_order_book:
                 row = {
-                    "server_datetime":datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S.%f"),
+                    "server_datetime":datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S.%f%Z"),
                     "product_id":msg['product_id']
                 }
                 row.update(inside_bids)
@@ -203,7 +203,7 @@ class DataFeed():
                         
         if msg['type'] == 'match':
             trades = [{
-                "server_datetime":datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S.%f"),
+                "server_datetime":datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S.%f%Z"),
                 "exchange_datetime":msg['time'],
                 "sequence":msg['sequence'],
                 "trade_id":msg['trade_id'],
@@ -228,7 +228,7 @@ class DataFeed():
                     missing_trade_index = [i for i, product_trade in enumerate(product_trades) if int(product_trade['trade_id']) == missing_trade_id][0]
                     missing_product_trade = product_trades[missing_trade_index]
                     missing_trade = {
-                            "server_datetime":datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S.%f"), #2017-10-15T05:10:53.700000Z
+                            "server_datetime":datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S.%f%Z"), #2017-10-15T05:10:53.700000Z
                             "exchange_datetime":missing_product_trade['time'],
                             "sequence":"None",
                             "trade_id":missing_product_trade['trade_id'],
