@@ -6,6 +6,7 @@ import os
 import datetime
 import configparser
 import gdax
+import sys
 
 config = configparser.ConfigParser()
 config.read('config')
@@ -83,7 +84,14 @@ class DataFeed():
                                          on_error=self.on_error
                                          )
         self.ws.on_open = self.on_open
-        self.ws.run_forever()
+        while True:
+            try:
+                self.ws.run_forever()
+            except Exception:
+                pass
+            except KeyboardInterrupt:
+                sys.exit()
+                
         
     def on_message(self,ws,msg):
         msg = ast.literal_eval(msg) #convert string to list
@@ -220,7 +228,7 @@ class DataFeed():
                     missing_trade_index = [i for i, product_trade in enumerate(product_trades) if int(product_trade['trade_id']) == missing_trade_id][0]
                     missing_product_trade = product_trades[missing_trade_index]
                     missing_trade = {
-                            "server_datetime":datetime.datetime.now(),
+                            "server_datetime":datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S.%f"), #2017-10-15T05:10:53.700000Z
                             "exchange_datetime":missing_product_trade['time'],
                             "sequence":"None",
                             "trade_id":missing_product_trade['trade_id'],
