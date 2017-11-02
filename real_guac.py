@@ -127,7 +127,7 @@ class DataFeed():
             
             if self.inside_order_books[msg['product_id']] != inside_order_book:
                 row = {
-                    "server_datetime":datetime.datetime.now(),
+                    "server_datetime":datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S.%f"),
                     "product_id":msg['product_id']
                 }
                 row.update(inside_bids)
@@ -203,7 +203,7 @@ class DataFeed():
                         
         if msg['type'] == 'match':
             trades = [{
-                "server_datetime":datetime.datetime.now(),
+                "server_datetime":datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S.%f"),
                 "exchange_datetime":msg['time'],
                 "sequence":msg['sequence'],
                 "trade_id":msg['trade_id'],
