@@ -8,8 +8,31 @@ import configparser
 import gdax
 import sys
 
+from db_utils import Database
+
+
 config = configparser.ConfigParser()
 config.read('config')
+
+DATABASE_CONFIG = {
+    "DATABASE": "websocket_data.db",
+    "SCHEMA": "schema/gdax_schema.sql",
+}
+
+ORDER_FIELDS = [
+    "server_datetime", "product_id", "bids_1", "bids_2", "bids_3", "bids_4", 
+    "bids_5", "bids_6", "bids_7", "bids_8", "bids_9", "bids_10", "bids_11", 
+    "bids_12", "bids_13", "bids_14", "bids_15", "asks_1", "asks_2", "asks_3", 
+    "asks_4", "asks_5", "asks_6", "asks_7", "asks_8", "asks_9", "asks_10", 
+    "asks_11", "asks_12", "asks_13", "asks_14", "asks_15"
+]
+
+TRADE_FIELDS = [
+    "server_datetime", "exchange_datetime", "sequence", "trade_id", "product_id",
+    "price", "volume", "side", "backfilled"
+]
+
+INSERT_SQL = "insert into {table} ({fields}) VALUES ({values});"
 
 class DataFeed():
 
@@ -23,76 +46,15 @@ class DataFeed():
         self.inside_order_books = {x:{"bids":{},"asks":{}} for x in self.product_ids}
         self.last_trade_ids = {x:None for x in self.product_ids}
         
-        file = "websocket_data.db"
-        # directory of script being run: os.path.dirname(os.path.abspath(__file__)) vs. current working directory used below
-        self.path = os.getcwd()+"/"+file
-        self.db = sqlite3.connect(self.path)
-        self.cursor = self.db.cursor()
-        self.cursor.execute('DROP TABLE IF EXISTS gdax_order_book')
-        self.cursor.execute(
-            """CREATE TABLE IF NOT EXISTS gdax_order_book(
-            server_datetime TEXT,
-            product_id TEXT,
-            bids_1 TEXT,
-            bids_2 TEXT,
-            bids_3 TEXT,
-            bids_4 TEXT,
-            bids_5 TEXT,
-            bids_6 TEXT,
-            bids_7 TEXT,
-            bids_8 TEXT,
-            bids_9 TEXT,
-            bids_10 TEXT,
-            bids_11 TEXT,
-            bids_12 TEXT,
-            bids_13 TEXT,
-            bids_14 TEXT,
-            bids_15 TEXT,
-            asks_1 TEXT,
-            asks_2 TEXT,
-            asks_3 TEXT,
-            asks_4 TEXT,
-            asks_5 TEXT,
-            asks_6 TEXT,
-            asks_7 TEXT,
-            asks_8 TEXT,
-            asks_9 TEXT,
-            asks_10 TEXT,
-            asks_11 TEXT,
-            asks_12 TEXT,
-            asks_13 TEXT,
-            asks_14 TEXT,
-            asks_15 TEXT
-               )""")
-        self.cursor.execute('DROP TABLE IF EXISTS gdax_trades')
-        self.cursor.execute(
-            """CREATE TABLE IF NOT EXISTS gdax_trades(
-            server_datetime TEXT,
-            exchange_datetime TEXT,
-            sequence TEXT,
-            trade_id TEXT,
-            product_id TEXT,
-            price TEXT,
-            volume TEXT,
-            side TEXT,
-            backfilled TEXT
-            )""")
-        self.db.commit()
+        self.db = Database(DATABASE_CONFIG)
         
-        self.ws = websocket.WebSocketApp(url,
-                                         on_message=self.on_message,
-                                         on_error=self.on_error
-                                         )
+        self.ws = websocket.WebSocketApp(
+            url,
+            on_message=self.on_message,
+            on_error=self.on_error
+        )        
         self.ws.on_open = self.on_open
-        while True:
-            try:
-                self.ws.run_forever()
-            except Exception:
-                pass
-            except KeyboardInterrupt:
-                sys.exit()
-                
-        
+
     def on_message(self,ws,msg):
         msg = ast.literal_eval(msg) #convert string to list
         if msg['type'] == 'snapshot':
@@ -132,71 +94,14 @@ class DataFeed():
                 }
                 row.update(inside_bids)
                 row.update(inside_asks)
-                self.cursor.execute("""INSERT INTO gdax_order_book (server_datetime, 
-                product_id, 
-                bids_1, 
-                bids_2, 
-                bids_3, 
-                bids_4, 
-                bids_5, 
-                bids_6, 
-                bids_7, 
-                bids_8, 
-                bids_9, 
-                bids_10, 
-                bids_11, 
-                bids_12, 
-                bids_13, 
-                bids_14, 
-                bids_15, 
-                asks_1, 
-                asks_2, 
-                asks_3, 
-                asks_4, 
-                asks_5, 
-                asks_6, 
-                asks_7, 
-                asks_8, 
-                asks_9, 
-                asks_10, 
-                asks_11, 
-                asks_12, 
-                asks_13, 
-                asks_14, 
-                asks_15) 
-                VALUES (:server_datetime, 
-                :product_id, 
-                :bids_1, 
-                :bids_2, 
-                :bids_3, 
-                :bids_4, 
-                :bids_5, 
-                :bids_6, 
-                :bids_7, 
-                :bids_8, 
-                :bids_9, 
-                :bids_10, 
-                :bids_11, 
-                :bids_12, 
-                :bids_13, 
-                :bids_14, 
-                :bids_15, 
-                :asks_1, 
-                :asks_2, 
-                :asks_3, 
-                :asks_4, 
-                :asks_5, 
-                :asks_6, 
-                :asks_7, 
-                :asks_8, 
-                :asks_9, 
-                :asks_10, 
-                :asks_11, 
-                :asks_12, 
-                :asks_13, 
-                :asks_14, 
-                :asks_15);""", row)
-                self.db.commit()
+                
+                sql = INSERT_SQL.format(
+                    table="gdax_order_book",
+                    fields=",".join(ORDER_FIELDS), 
+                    values=",".join([":{}".format(field) for field in ORDER_FIELDS]),
+                )
+                self.db._execute(sql, data=row)
+
                 self.inside_order_books[msg['product_id']] = inside_order_book
                 print(row)
             
@@ -240,29 +145,13 @@ class DataFeed():
                     }
                     trades.append(missing_trade)
                 
-                
+            sql = INSERT_SQL.format(
+                    table="gdax_trades",
+                    fields=",".join(TRADE_FIELDS),
+                    values=",".join([":{}".format(field) for field in ORDER_FIELDS]),
+            )
             for trade in trades:
-                self.cursor.execute("""INSERT INTO gdax_trades (server_datetime, 
-                exchange_datetime, 
-                sequence,
-                trade_id,
-                product_id,
-                price,
-                volume,
-                side,
-                backfilled
-                ) 
-                VALUES (:server_datetime, 
-                :exchange_datetime, 
-                :sequence, 
-                :trade_id,
-                :product_id,
-                :price,
-                :volume,
-                :side,
-                :backfilled
-                );""", trade)
-                self.db.commit()
+                self.db._execute(sql, trade)
                 print(trade)
         
 
@@ -277,6 +166,15 @@ class DataFeed():
         request = json.dumps(request)
         request = request.encode("utf-8")
         ws.send(request)
-        
+    
+    def run(self):
+        try:
+            self.ws.run_forever()
+        except KeyboardInterrupt:
+            sys.exit()
+        except Exception:
+            pass
+            
 if __name__ == "__main__":
-    DataFeed()
+    feed = DataFeed()
+    feed.run()
