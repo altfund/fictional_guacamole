@@ -3,14 +3,18 @@ import sqlite3
 
 
 class Database(object):
+    
+    INSERT_SQL = "insert into {table} ({fields}) VALUES ({values});"
 
-    def __init__(self, config):
+    def __init__(self, config, migrate=False, row_factory=None):
         self.db_name = config['DATABASE']
         self.schema_path = config['SCHEMA']
         
         _already_exists = os.path.exists(self.db_name)
-
-        self.migrate() # should check before migrating 
+        self.row_factory = row_factory
+        
+        if migrate:
+            self.migrate()
 
     def _execute(self, sql, data, fetch=False):
         """
@@ -20,6 +24,8 @@ class Database(object):
         ret = None
 
         with sqlite3.connect(self.db_name) as conn:
+            if self.row_factory:
+                conn.row_factory = self.row_factory
             cur = conn.cursor()
             cur.execute(sql, data)
             if fetch:
@@ -42,17 +48,17 @@ class Database(object):
 
         print("Migrated database with schem {}".format(self.schema_path))
 
-    def insert(self, table, data):
+    def insert_into(self, table, data):
         """
         Insert data into table.
         param:
             - table: table name "string"
             - data: actual data to insert 
         """
-        pass
+        sql = self.INSERT_SQL.format(
+            table=table,
+            fields=",".join(data.keys()),
+            values=",".join([":{}".format(key) for key in data.keys()])
+        )
 
-    def get(self, query):
-        """
-        Retrive data from table.
-        """
-        pass 
+        self._execute(sql, data)
