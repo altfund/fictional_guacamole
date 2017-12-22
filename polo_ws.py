@@ -1,63 +1,37 @@
-import websocket
-import ast
-import json
-import sqlite3
 import os
-import datetime
-import configparser
 import sys
+import json
+import datetime
+import websocket
 
 from db_utils import Database
+from config import POLO_PRODUCT_IDS, DATABASE
 
-
-config = configparser.ConfigParser()
-config.read('polo_config')
-
-DATABASE_CONFIG = {
-    "DATABASE": "websocket_data.db",
-    "SCHEMA": "schema/polo_schema.sql",
-}
-
-ORDER_FIELDS = [
-    "server_datetime", "product_id", "bids_1", "bids_2", "bids_3", "bids_4", 
-    "bids_5", "bids_6", "bids_7", "bids_8", "bids_9", "bids_10", "bids_11", 
-    "bids_12", "bids_13", "bids_14", "bids_15", "asks_1", "asks_2", "asks_3", 
-    "asks_4", "asks_5", "asks_6", "asks_7", "asks_8", "asks_9", "asks_10", 
-    "asks_11", "asks_12", "asks_13", "asks_14", "asks_15"
-]
-
-TRADE_FIELDS = [
-    "server_datetime", "exchange_datetime", "sequence", "trade_id", "product_id",
-    "price", "volume", "side", "backfilled"
-]
-
-INSERT_SQL = "insert into {table} ({fields}) VALUES ({values});"
 
 class DataFeed():
 
     def __init__(self):
-        url = "wss://api2.poloniex.com"
+        self.url = "wss://api2.poloniex.com"
         #self.public_client = polo.PublicClient()
         
-        x = ast.literal_eval(config['settings']['product_ids'])
-        self.product_ids = [n.strip() for n in x]
+        self.product_ids = POLO_PRODUCT_IDS
         self.product_codes = {}
         self.order_books = {x:{} for x in self.product_ids}
         self.inside_order_books = {x:{"bids":{},"asks":{}} for x in self.product_ids}
         self.last_trade_ids = {x:None for x in self.product_ids}
         
-        self.db = Database(DATABASE_CONFIG)
+        self.db = Database(DATABASE['POLO'], migrate=True)
 
         self.ws = websocket.WebSocketApp(
-            url,
+            self.url,
             on_message=self.on_message,
-            on_error=self.on_error
+            on_error=self.on_error,
+            on_open=self.on_open,
         )
-        self.ws.on_open = self.on_open
 
     def on_message(self,ws,msg):
-        msg = ast.literal_eval(msg) #convert string to list
-        #print(msg)
+        msg = json.loads(msg)
+
         for message in msg[2]: #maybe will be better if current implementation doesn't work
             if message[0] == 'i':
                 print("got ob snapshot")
@@ -100,7 +74,7 @@ class DataFeed():
                         fields=",".join(ORDER_FIELDS), 
                         values=",".join([":{}".format(field) for field in ORDER_FIELDS]),
                     )
-                    self.db._execute(sql, data=row)
+                    self.db.insert_into("polo_order_book", row)
 
                     self.inside_order_books[self.product_codes[msg[0]]] = inside_order_book
                     print(row)
@@ -133,13 +107,8 @@ class DataFeed():
                     missing_trade_ids = list(range(last_trade_id + 1, current_trade_id))
                     print("missed the following trades: "+str(missing_trade_ids))
                     
-                sql = INSERT_SQL.format(
-                    table="polo_trades",
-                    fields=",".join(TRADE_FIELDS),
-                    values=",".join([":{}".format(field) for field in ORDER_FIELDS]),
-                )
                 for trade in trades:
-                    self.db._execute(sql, trade)
+                    self.db.insert_into("polo_trades", trade)
                     print(trade)
 
     def on_error(self,ws,error):
@@ -152,7 +121,7 @@ class DataFeed():
         #request = json.dumps(request)
         #request = request.encode("utf-8")
         for x in self.product_ids:
-            ws.send(json.dumps({'command':'subscribe','channel':x}))
+            ws.send(json.dumps({'command':'subscribe','channel': x}))
         #ws.send(request)
     
     def run(self):
