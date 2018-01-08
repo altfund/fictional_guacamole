@@ -1,101 +1,37 @@
-import websocket
-import ast
-import json
-import sqlite3
 import os
-import datetime
-import configparser
 import sys
+import json
+import datetime
+import websocket
 
-config = configparser.ConfigParser()
-config.read('polo_config')
+from db_utils import Database
+from config import POLO_PRODUCT_IDS, DATABASE
+
 
 class DataFeed():
 
     def __init__(self):
-        url = "wss://api2.poloniex.com"
+        self.url = "wss://api2.poloniex.com"
         #self.public_client = polo.PublicClient()
         
-        x = ast.literal_eval(config['settings']['product_ids'])
-        self.product_ids = [n.strip() for n in x]
+        self.product_ids = POLO_PRODUCT_IDS
         self.product_codes = {}
         self.order_books = {x:{} for x in self.product_ids}
         self.inside_order_books = {x:{"bids":{},"asks":{}} for x in self.product_ids}
         self.last_trade_ids = {x:None for x in self.product_ids}
         
-        file = "websocket_data.db"
-        # directory of script being run: os.path.dirname(os.path.abspath(__file__)) vs. current working directory used below
-        self.path = os.getcwd()+"/"+file
-        self.db = sqlite3.connect(self.path)
-        self.cursor = self.db.cursor()
-        self.cursor.execute('DROP TABLE IF EXISTS polo_order_book')
-        self.cursor.execute(
-            """CREATE TABLE IF NOT EXISTS polo_order_book(
-            server_datetime TEXT,
-            product_id TEXT,
-            bids_1 TEXT,
-            bids_2 TEXT,
-            bids_3 TEXT,
-            bids_4 TEXT,
-            bids_5 TEXT,
-            bids_6 TEXT,
-            bids_7 TEXT,
-            bids_8 TEXT,
-            bids_9 TEXT,
-            bids_10 TEXT,
-            bids_11 TEXT,
-            bids_12 TEXT,
-            bids_13 TEXT,
-            bids_14 TEXT,
-            bids_15 TEXT,
-            asks_1 TEXT,
-            asks_2 TEXT,
-            asks_3 TEXT,
-            asks_4 TEXT,
-            asks_5 TEXT,
-            asks_6 TEXT,
-            asks_7 TEXT,
-            asks_8 TEXT,
-            asks_9 TEXT,
-            asks_10 TEXT,
-            asks_11 TEXT,
-            asks_12 TEXT,
-            asks_13 TEXT,
-            asks_14 TEXT,
-            asks_15 TEXT
-               )""")
-        self.cursor.execute('DROP TABLE IF EXISTS polo_trades')
-        self.cursor.execute(
-            """CREATE TABLE IF NOT EXISTS polo_trades(
-            server_datetime TEXT,
-            exchange_datetime TEXT,
-            sequence TEXT,
-            trade_id TEXT,
-            product_id TEXT,
-            price TEXT,
-            volume TEXT,
-            side TEXT,
-            backfilled TEXT
-            )""")
-        self.db.commit()
-        
-        self.ws = websocket.WebSocketApp(url,
-                                         on_message=self.on_message,
-                                         on_error=self.on_error
-                                         )
-        self.ws.on_open = self.on_open
-        while True:
-            try:
-                self.ws.run_forever()
-            except Exception:
-                pass
-            except KeyboardInterrupt:
-                sys.exit()
-                
-        
+        self.db = Database(DATABASE['POLO'], migrate=True)
+
+        self.ws = websocket.WebSocketApp(
+            self.url,
+            on_message=self.on_message,
+            on_error=self.on_error,
+            on_open=self.on_open,
+        )
+
     def on_message(self,ws,msg):
-        msg = ast.literal_eval(msg) #convert string to list
-        #print(msg)
+        msg = json.loads(msg)
+
         for message in msg[2]: #maybe will be better if current implementation doesn't work
             if message[0] == 'i':
                 print("got ob snapshot")
@@ -132,71 +68,14 @@ class DataFeed():
                     }
                     row.update(inside_bids)
                     row.update(inside_asks)
-                    self.cursor.execute("""INSERT INTO polo_order_book (server_datetime, 
-                    product_id, 
-                    bids_1, 
-                    bids_2, 
-                    bids_3, 
-                    bids_4, 
-                    bids_5, 
-                    bids_6, 
-                    bids_7, 
-                    bids_8, 
-                    bids_9, 
-                    bids_10, 
-                    bids_11, 
-                    bids_12, 
-                    bids_13, 
-                    bids_14, 
-                    bids_15, 
-                    asks_1, 
-                    asks_2, 
-                    asks_3, 
-                    asks_4, 
-                    asks_5, 
-                    asks_6, 
-                    asks_7, 
-                    asks_8, 
-                    asks_9, 
-                    asks_10, 
-                    asks_11, 
-                    asks_12, 
-                    asks_13, 
-                    asks_14, 
-                    asks_15) 
-                    VALUES (:server_datetime, 
-                    :product_id, 
-                    :bids_1, 
-                    :bids_2, 
-                    :bids_3, 
-                    :bids_4, 
-                    :bids_5, 
-                    :bids_6, 
-                    :bids_7, 
-                    :bids_8, 
-                    :bids_9, 
-                    :bids_10, 
-                    :bids_11, 
-                    :bids_12, 
-                    :bids_13, 
-                    :bids_14, 
-                    :bids_15, 
-                    :asks_1, 
-                    :asks_2, 
-                    :asks_3, 
-                    :asks_4, 
-                    :asks_5, 
-                    :asks_6, 
-                    :asks_7, 
-                    :asks_8, 
-                    :asks_9, 
-                    :asks_10, 
-                    :asks_11, 
-                    :asks_12, 
-                    :asks_13, 
-                    :asks_14, 
-                    :asks_15);""", row)
-                    self.db.commit()
+
+                    sql = INSERT_SQL.format(
+                        table="polo_order_book",
+                        fields=",".join(ORDER_FIELDS), 
+                        values=",".join([":{}".format(field) for field in ORDER_FIELDS]),
+                    )
+                    self.db.insert_into("polo_order_book", row)
+
                     self.inside_order_books[self.product_codes[msg[0]]] = inside_order_book
                     print(row)
                 
@@ -228,31 +107,9 @@ class DataFeed():
                     missing_trade_ids = list(range(last_trade_id + 1, current_trade_id))
                     print("missed the following trades: "+str(missing_trade_ids))
                     
-                    
                 for trade in trades:
-                    self.cursor.execute("""INSERT INTO polo_trades (server_datetime, 
-                    exchange_datetime, 
-                    sequence,
-                    trade_id,
-                    product_id,
-                    price,
-                    volume,
-                    side,
-                    backfilled
-                    ) 
-                    VALUES (:server_datetime, 
-                    :exchange_datetime, 
-                    :sequence, 
-                    :trade_id,
-                    :product_id,
-                    :price,
-                    :volume,
-                    :side,
-                    :backfilled
-                    );""", trade)
-                    self.db.commit()
+                    self.db.insert_into("polo_trades", trade)
                     print(trade)
-        
 
     def on_error(self,ws,error):
         print(error)
@@ -264,12 +121,20 @@ class DataFeed():
         #request = json.dumps(request)
         #request = request.encode("utf-8")
         for x in self.product_ids:
-            ws.send(json.dumps({'command':'subscribe','channel':x}))
+            ws.send(json.dumps({'command':'subscribe','channel': x}))
         #ws.send(request)
-        
-if __name__ == "__main__":
-    DataFeed()
     
+    def run(self):
+        try:
+            self.ws.run_forever()
+        except KeyboardInterrupt:
+            sys.exit()
+        except Exception:
+            pass
+
+if __name__ == "__main__":
+    feed = DataFeed()
+    feed.run()
     
 # https://stackoverflow.com/questions/32154121/how-to-connect-to-poloniex-com-websocket-api-using-a-python-library
 

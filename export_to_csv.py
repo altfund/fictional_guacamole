@@ -1,22 +1,18 @@
 import sys
-import sqlite3
 import csv
+import sqlite3
 
-conn=sqlite3.connect("websocket_data.db")
-c=conn.cursor()
-conn.row_factory=sqlite3.Row
-crsr=conn.execute("SELECT * From gdax_order_book")
-row=crsr.fetchone()
-titles=row.keys()
+from db_utils import Database
+from config import DATABASE
 
-data = c.execute("SELECT * FROM gdax_order_book")
-if sys.version_info < (3,):
-    f = open('order_books.csv', 'wb')
-else:
-    f = open('order_books.csv', 'w', newline="")
+db = Database(DATABASE['GDAX'], row_factory=sqlite3.Row)
 
-writer = csv.writer(f,delimiter=',')
-writer.writerow(titles)  # keys=title you're looking for
-# write the rest
-writer.writerows(data)
-f.close()
+data = db._execute("SELECT * FROM gdax_order_book", {}, fetch=True)
+
+titles = data[0].keys()
+mode = "wb" if sys.version_info < (3,) else "w"
+
+with open('order_books.csv', mode) as f:
+    writer = csv.writer(f, delimiter=',')
+    writer.writerow(titles)  # keys=title you're looking for
+    writer.writerows(data)
