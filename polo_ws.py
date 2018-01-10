@@ -69,11 +69,6 @@ class DataFeed():
                     row.update(inside_bids)
                     row.update(inside_asks)
 
-                    sql = INSERT_SQL.format(
-                        table="polo_order_book",
-                        fields=",".join(ORDER_FIELDS), 
-                        values=",".join([":{}".format(field) for field in ORDER_FIELDS]),
-                    )
                     self.db.insert_into("polo_order_book", row)
 
                     self.inside_order_books[self.product_codes[msg[0]]] = inside_order_book
