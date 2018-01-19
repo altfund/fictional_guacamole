@@ -16,7 +16,7 @@ class DataFeed():
         self.url = "wss://ws-feed.gdax.com"
         self.public_client = gdax.PublicClient()
 
-        self.product_ids = config.GDAX_PRODUCT_IDS
+        self.product_ids = GDAX_PRODUCT_IDS
         
         self.order_books = {x: {} for x in self.product_ids}
         self.inside_order_books = {
@@ -24,7 +24,7 @@ class DataFeed():
         }
         self.last_trade_ids = {x: None for x in self.product_ids}
         
-        self.db = Database(config.DATABASE['GDAX'], migrate=True)
+        self.db = Database(DATABASE['GDAX'], migrate=True)
         
         self.ws = websocket.WebSocketApp(
             self.url,
