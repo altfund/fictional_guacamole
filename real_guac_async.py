@@ -3,6 +3,12 @@ import sys
 import json
 import datetime
 
+import asyncio
+import aiohttp
+import aiosqlite
+
+import ccxt.async as ccxt
+
 import gdax
 import websocket
 
@@ -12,9 +18,11 @@ from config import GDAX_PRODUCT_IDS, DATABASE
 
 class DataFeed():
 
+    asyncio_loop = None
+
     def __init__(self):
         self.url = "wss://ws-feed.gdax.com"
-        self.public_client = gdax.PublicClient()
+        self.public_client = ccxt.gdax()
 
         self.product_ids = GDAX_PRODUCT_IDS
 
@@ -24,24 +32,26 @@ class DataFeed():
         }
         self.last_trade_ids = {x: None for x in self.product_ids}
 
-        self.db = Database(DATABASE['GDAX'], migrate=True)
+        self.db = Database(DATABASE['GDAX'], migrate=False)
+        self.migrate = True
+        self.asyncio_loop = self.asyncio_loop or asyncio.get_event_loop()
+        self.aiohttp_session = aiohttp.ClientSession(loop=self.asyncio_loop)
 
-        self.ws = websocket.WebSocketApp(
-            self.url,
-            on_message=self.on_message,
-            on_error=self.on_error,
-            on_open=self.on_open,
-        )
+    async def web_socket_handler(self):
+        request_packet = self.get_request_packet()
+        async with self.aiohttp_session.ws_connect(self.url) as ws:
+            await ws.send_json(request_packet)
+            async for msg in ws:
+                await self.message_builder(msg.data)
 
-    def on_message(self, ws, msg):
+    async def message_builder(self, msg):
         msg = json.loads(msg)
-
-        product_id = msg['product_id']
-
         if msg['type'] == 'snapshot':
+            product_id = msg['product_id']
             self.order_books[product_id] = {'bids': msg['bids'], 'asks': msg['asks']}
 
         if msg['type'] == 'l2update':
+            product_id = msg['product_id']
             changes = msg['changes']
 
             for change in changes:
@@ -75,20 +85,18 @@ class DataFeed():
 
             if self.inside_order_books[product_id] != inside_order_book:
                 row = {
-                    "server_datetime":datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S.%f%Z"),
+                    "server_datetime": datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S.%f%Z"),
                     "product_id": product_id
                 }
                 row.update(inside_bids)
                 row.update(inside_asks)
 
-                self.db.insert_into("gdax_order_book", data=row)
-
+                await self.db.insert_into("gdax_order_book", data=row)
                 self.inside_order_books[product_id] = inside_order_book
                 print(row)
 
-
         if msg['type'] == 'match':
-            print (aa)
+            product_id = msg['product_id']
             trades = [{
                 "server_datetime":datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S.%f%Z"),
                 "exchange_datetime": msg['time'],
@@ -110,7 +118,10 @@ class DataFeed():
             if current_trade_id > (last_trade_id + 1):
                 missing_trade_ids = list(range(last_trade_id + 1, current_trade_id))
                 print("missed the following trades: "+str(missing_trade_ids))
+                ccxt_product_id = product_id.replace("-", "/")
+                product_trades = self.public_client.fetch_order_book(ccxt_product_id)
                 product_trades = self.public_client.get_product_trades(product_id=product_id)
+                product_trades = [product_trade['info'] for product_trade in product_trades]
                 for missing_trade_id in missing_trade_ids:
                     missing_trade_index = [i for i, product_trade in enumerate(product_trades) if int(product_trade['trade_id']) == missing_trade_id][0]
                     missing_product_trade = product_trades[missing_trade_index]
@@ -128,31 +139,25 @@ class DataFeed():
                     trades.append(missing_trade)
 
             for trade in trades:
-                self.db.insert_into("gdax_trades", trade)
+                await self.db.insert_into("gdax_trades", trade)
                 print(trade)
 
-
-    def on_error(self,ws,error):
-        print(error)
-
-    def on_open(self, ws):
-        request = {
+    def get_request_packet(self):
+        request_packet = {
             "type": "subscribe",
             "product_ids": self.product_ids,
-            "channels": ["level2","matches"]
+            "channels": ["level2", "matches"]
         }
-        request = json.dumps(request)
-        request = request.encode("utf-8")
-        ws.send(request)
+        return request_packet
 
-    def run(self):
-        try:
-            self.ws.run_forever()
-        except KeyboardInterrupt:
-            sys.exit()
-        except Exception:
-            pass
+    async def subscribe_to_exchange(self):
+        if self.migrate:
+            await self.db.migrate()
+        await self.web_socket_handler()
+
 
 if __name__ == "__main__":
     feed = DataFeed()
-    feed.run()
+    loop = asyncio.get_event_loop()
+    asyncio.async(feed.subscribe_to_exchange())
+    loop.run_forever()

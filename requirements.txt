@@ -5,3 +5,7 @@ greenlet==0.4.12
 requests==2.13.0
 six==1.10.0
 websocket-client==0.40.0
+asyncio
+aiohttp
+aiosqlite
+ccxt
