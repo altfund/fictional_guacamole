@@ -30,7 +30,7 @@ class DataFeed():
         request_packets = self.get_request_packet()
         async with self.aiohttp_session.ws_connect(self.url) as ws:
             for packet in request_packets:
-                await ws.send_json(request_packets)
+                await ws.send_json(packet)
             async for msg in ws:
                 await self.message_builder(msg.data)
 
