@@ -133,20 +133,22 @@ class DataFeed():
                 product_trades = await self.public_client.fetch_trades(ccxt_product_id)
                 product_trades = [product_trade['info'] for product_trade in product_trades]
                 for missing_trade_id in missing_trade_ids:
-                    missing_trade_index = [i for i, product_trade in enumerate(product_trades) if int(product_trade['trade_id']) == missing_trade_id][0]
-                    missing_product_trade = product_trades[missing_trade_index]
-                    missing_trade = {
-                            "server_datetime":datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S.%f%Z"), #2017-10-15T05:10:53.700000Z
-                            "exchange_datetime":missing_product_trade['time'],
-                            "sequence":"None",
-                            "trade_id":missing_product_trade['trade_id'],
-                            "product_id": product_id,
-                            'price':missing_product_trade['price'],
-                            'volume':missing_product_trade['size'],
-                            'side':missing_product_trade['side'],
-                            'backfilled':'True'
-                    }
-                    trades.append(missing_trade)
+                    missing_trade_index = [i for i, product_trade in enumerate(product_trades) if int(product_trade['trade_id']) == missing_trade_id]
+                    if missing_trade_index:
+                        missing_trade_index = missing_trade_index[0]
+                        missing_product_trade = product_trades[missing_trade_index]
+                        missing_trade = {
+                                "server_datetime":datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S.%f%Z"), #2017-10-15T05:10:53.700000Z
+                                "exchange_datetime":missing_product_trade['time'],
+                                "sequence":"None",
+                                "trade_id":missing_product_trade['trade_id'],
+                                "product_id": product_id,
+                                'price':missing_product_trade['price'],
+                                'volume':missing_product_trade['size'],
+                                'side':missing_product_trade['side'],
+                                'backfilled':'True'
+                        }
+                        trades.append(missing_trade)
 
             for trade in trades:
                 await self.db.insert_into("gdax_trades", trade)
