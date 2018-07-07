@@ -130,8 +130,7 @@ class DataFeed():
                 missing_trade_ids = list(range(last_trade_id + 1, current_trade_id))
                 print("missed the following trades: "+str(missing_trade_ids))
                 ccxt_product_id = product_id.replace("-", "/")
-                product_trades = self.public_client.fetch_order_book(ccxt_product_id)
-                product_trades = self.public_client.get_product_trades(product_id=product_id)
+                product_trades = await self.public_client.fetch_trades(ccxt_product_id)
                 product_trades = [product_trade['info'] for product_trade in product_trades]
                 for missing_trade_id in missing_trade_ids:
                     missing_trade_index = [i for i, product_trade in enumerate(product_trades) if int(product_trade['trade_id']) == missing_trade_id][0]
