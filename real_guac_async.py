@@ -38,11 +38,22 @@ class DataFeed():
         self.aiohttp_session = aiohttp.ClientSession(loop=self.asyncio_loop)
 
     async def web_socket_handler(self):
+        print("connecting with websocket")
         request_packet = self.get_request_packet()
         async with self.aiohttp_session.ws_connect(self.url) as ws:
             await ws.send_json(request_packet)
             async for msg in ws:
-                await self.message_builder(msg.data)
+                if msg.tp == aiohttp.WSMsgType.text:
+                    if msg.data == 'close':
+                        await ws.close()
+                        await self.web_socket_handler()
+                    else:
+                        await self.message_builder(msg.data)
+                elif msg.tp == aiohttp.WSMsgType.closed:
+                    await self.web_socket_handler()  # reconnect with the web socket
+                elif msg.tp == aiohttp.WSMsgType.error:
+                    await self.web_socket_handler()  # reconnect with the web socket
+
 
     async def message_builder(self, msg):
         msg = json.loads(msg)
