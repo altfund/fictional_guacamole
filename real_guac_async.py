@@ -55,7 +55,6 @@ class DataFeed():
                 elif msg.tp == aiohttp.WSMsgType.error:
                     await self.web_socket_handler()  # reconnect with the web socket
 
-
     async def message_builder(self, msg):
         msg = json.loads(msg)
         if msg['type'] == 'snapshot':
@@ -130,38 +129,49 @@ class DataFeed():
             if current_trade_id > (last_trade_id + 1):
                 missing_trade_ids = list(range(last_trade_id + 1, current_trade_id))
                 print("missed the following trades: "+str(missing_trade_ids))
-                ccxt_product_id = product_id.replace("-", "/")
-                product_trades = await self.public_client.fetch_trades(ccxt_product_id)
-                product_trades = [product_trade['info'] for product_trade in product_trades]
-                product_trades_dict = {}
-                for product_trade in product_trades:
-                    product_trades_dict[int(product_trade['trade_id'])] = product_trade
-                for missing_trade_id in missing_trade_ids:
-                    if missing_trade_id in product_trades_dict:
-                        missing_product_trade = product_trades_dict[missing_trade_id]
-                        missing_trade = {
-                                "server_datetime":datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S.%f%Z"), #2017-10-15T05:10:53.700000Z
-                                "exchange_datetime":missing_product_trade['time'],
-                                "sequence":"None",
-                                "trade_id":missing_product_trade['trade_id'],
-                                "product_id": product_id,
-                                'price':missing_product_trade['price'],
-                                'volume':missing_product_trade['size'],
-                                'side':missing_product_trade['side'],
-                                'backfilled':'True'
-                        }
-                        trades.append(missing_trade)
-                    else:
-                        print("Trade missed {}".format(missing_trade_id))
+                after_arg = None
+                recursive_count = 1
+                while missing_trade_ids and recursive_count < 4:
+                    ccxt_product_id = product_id.replace("-", "/")
+                    params = {}
+                    if after_arg:
+                        params = {'after': after_arg}
+                    product_trades = await self.public_client.fetch_trades(ccxt_product_id, params)
+                    product_trades = [product_trade['info'] for product_trade in product_trades]
+                    product_trades_dict = {}
+                    for product_trade in product_trades:
+                        product_trades_dict[int(product_trade['trade_id'])] = product_trade
+                    for missing_trade_id in missing_trade_ids:
+                        if missing_trade_id in product_trades_dict:
+                            missing_product_trade = product_trades_dict[missing_trade_id]
+                            missing_trade = {
+                                    "server_datetime":datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S.%f%Z"), #2017-10-15T05:10:53.700000Z
+                                    "exchange_datetime":missing_product_trade['time'],
+                                    "sequence":"None",
+                                    "trade_id":missing_product_trade['trade_id'],
+                                    "product_id": product_id,
+                                    'price':missing_product_trade['price'],
+                                    'volume':missing_product_trade['size'],
+                                    'side':missing_product_trade['side'],
+                                    'backfilled':'True'
+                            }
+                            trades.append(missing_trade)
+                        else:
+                            print("Trade missed {}".format(missing_trade_id))
 
-                final_missing_trades = (set(missing_trade_ids) - set(list(product_trades_dict.keys())))
-                trades_filled = (set(list(product_trades_dict.keys())) - set(missing_trade_ids))
-                logging.error("__________________________________________________________________")
-                logging.error("GDAX: Trades filled {}".format(trades_filled))
-                logging.error("GDAX: Trades missing {}".format(final_missing_trades))
-                logging.error("GDAX: Required Trades {}".format(missing_trade_ids))
-                logging.error("GDAX: Trades from API: {}".format(product_trades_dict.keys()))
-                logging.error("__________________________________________________________________")
+                    missing_trade_ids = list(set(missing_trade_ids) - set(list(product_trades_dict.keys())))
+                    if missing_trade_ids:
+                        after_arg = max(missing_trade_ids) + 1
+                        recursive_count = recursive_count + 1
+                    final_missing_trades = (set(missing_trade_ids) - set(list(product_trades_dict.keys())))
+                    trades_filled = list((set(list(product_trades_dict.keys())) - set(missing_trade_ids)))
+                    logging.error("__________________________________________________________________")
+                    logging.error("GDAX: Recusive Count {}".format(recursive_count))
+                    logging.error("GDAX: Trades finally filled {}".format(trades_filled))
+                    logging.error("GDAX: Trades finally missing {}".format(final_missing_trades))
+                    logging.error("GDAX: Required Trades {}".format(missing_trade_ids))
+                    logging.error("GDAX: Trades from API: {}".format(product_trades_dict.keys()))
+                    logging.error("__________________________________________________________________")
 
             for trade in trades:
                 await self.db.insert_into("gdax_trades", trade)
@@ -172,6 +182,7 @@ class DataFeed():
             "type": "subscribe",
             "product_ids": self.product_ids,
             "channels": ["level2", "matches"]
+            # "channels": ["matches"]
         }
         return request_packet
 
