@@ -1,16 +1,17 @@
-import os
-import sys
 import json
 import datetime
 
 import asyncio
 import aiohttp
-import aiosqlite
 
 import ccxt.async as ccxt
 
-import gdax
-import websocket
+
+try:
+    from .logging_agent import logging
+except:
+    from logging_agent import logging
+
 
 from db_utils import Database
 from config import GDAX_PRODUCT_IDS, DATABASE
@@ -132,11 +133,12 @@ class DataFeed():
                 ccxt_product_id = product_id.replace("-", "/")
                 product_trades = await self.public_client.fetch_trades(ccxt_product_id)
                 product_trades = [product_trade['info'] for product_trade in product_trades]
+                product_trades_dict = {}
+                for product_trade in product_trades:
+                    product_trades_dict[int(product_trade['trade_id'])] = product_trade
                 for missing_trade_id in missing_trade_ids:
-                    missing_trade_index = [i for i, product_trade in enumerate(product_trades) if int(product_trade['trade_id']) == missing_trade_id]
-                    if missing_trade_index:
-                        missing_trade_index = missing_trade_index[0]
-                        missing_product_trade = product_trades[missing_trade_index]
+                    if missing_trade_id in product_trades_dict:
+                        missing_product_trade = product_trades_dict[missing_trade_id]
                         missing_trade = {
                                 "server_datetime":datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S.%f%Z"), #2017-10-15T05:10:53.700000Z
                                 "exchange_datetime":missing_product_trade['time'],
@@ -149,10 +151,21 @@ class DataFeed():
                                 'backfilled':'True'
                         }
                         trades.append(missing_trade)
+                    else:
+                        print("Trade missed {}".format(missing_trade_id))
+
+                final_missing_trades = (set(missing_trade_ids) - set(list(product_trades_dict.keys())))
+                trades_filled = (set(list(product_trades_dict.keys())) - set(missing_trade_ids))
+                logging.error("__________________________________________________________________")
+                logging.error("GDAX: Trades filled {}".format(trades_filled))
+                logging.error("GDAX: Trades missing {}".format(final_missing_trades))
+                logging.error("GDAX: Required Trades {}".format(missing_trade_ids))
+                logging.error("GDAX: Trades from API: {}".format(product_trades_dict.keys()))
+                logging.error("__________________________________________________________________")
 
             for trade in trades:
                 await self.db.insert_into("gdax_trades", trade)
-                print(trade)
+                print (trade)
 
     def get_request_packet(self):
         request_packet = {
