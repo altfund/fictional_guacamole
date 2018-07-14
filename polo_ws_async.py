@@ -79,9 +79,9 @@ class DataFeed():
                     if not level_index:
                         insert_indexes = None
                         if change_side == 'bids':
-                            insert_indexes = [i for i, order in enumerate(orders) if float(order[0]) >= float(message[1])]
+                            insert_indexes = [i for i, order in enumerate(orders) if float(order[0]) >= float(message[2])]
                         if change_side == 'asks':
-                            insert_indexes = [i for i, order in enumerate(orders) if float(order[0]) <= float(message[1])]
+                            insert_indexes = [i for i, order in enumerate(orders) if float(order[0]) <= float(message[2])]
                         if not insert_indexes:
                             insert_index = -1
                         else:
