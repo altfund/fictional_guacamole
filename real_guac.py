@@ -3,7 +3,8 @@ import sys
 import json
 import datetime
 
-import gdax
+import ccxt as ccxt
+
 import websocket
 
 from db_utils import Database
@@ -14,7 +15,7 @@ class DataFeed():
 
     def __init__(self):
         self.url = "wss://ws-feed.gdax.com"
-        self.public_client = gdax.PublicClient()
+        self.public_client = ccxt.gdax()
 
         self.product_ids = GDAX_PRODUCT_IDS
 
@@ -88,7 +89,6 @@ class DataFeed():
 
 
         if msg['type'] == 'match':
-            print (aa)
             trades = [{
                 "server_datetime":datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S.%f%Z"),
                 "exchange_datetime": msg['time'],
@@ -110,7 +110,10 @@ class DataFeed():
             if current_trade_id > (last_trade_id + 1):
                 missing_trade_ids = list(range(last_trade_id + 1, current_trade_id))
                 print("missed the following trades: "+str(missing_trade_ids))
-                product_trades = self.public_client.get_product_trades(product_id=product_id)
+                ccxt_product_id = product_id.replace("-", "/")
+                product_trades = self.public_client.fetch_trades(ccxt_product_id)
+                product_trades = [product_trade['info'] for product_trade in product_trades]
+
                 for missing_trade_id in missing_trade_ids:
                     missing_trade_index = [i for i, product_trade in enumerate(product_trades) if int(product_trade['trade_id']) == missing_trade_id][0]
                     missing_product_trade = product_trades[missing_trade_index]
