@@ -24,9 +24,9 @@ class Database(object):
         async with aiosqlite.connect(self.db_name) as conn:
             if self.row_factory:
                 conn.row_factory = self.row_factory
-            await conn.execute(sql, data)
+            curr = await conn.execute(sql, data)
             if fetch:
-                ret = cur.fetchall()
+                ret = curr.fetchall()
             await conn.commit()
             await conn.close()
         return ret
