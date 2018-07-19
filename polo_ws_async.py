@@ -36,20 +36,27 @@ class DataFeed():
 
     async def web_socket_handler(self):
         request_packets = self.get_request_packet()
-        async with self.aiohttp_session.ws_connect(self.url) as ws:
-            for packet in request_packets:
-                await ws.send_json(packet)
-            async for msg in ws:
-                if msg.tp == aiohttp.WSMsgType.text:
-                    if msg.data == 'close':
+        try:
+            async with self.aiohttp_session.ws_connect(self.url) as ws:
+                for packet in request_packets:
+                    await ws.send_json(packet)
+                async for msg in ws:
+                    if msg.tp == aiohttp.WSMsgType.text:
+                        if msg.data == 'close':
+                            await ws.close()
+                            await self.web_socket_handler()
+                        else:
+                            await self.message_builder(msg.data)
+                    elif msg.tp == aiohttp.WSMsgType.closed:
                         await ws.close()
-                        await self.web_socket_handler()
-                    else:
-                        await self.message_builder(msg.data)
-                elif msg.tp == aiohttp.WSMsgType.closed:
-                    await self.web_socket_handler()  # reconnect with the web socket
-                elif msg.tp == aiohttp.WSMsgType.error:
-                    await self.web_socket_handler()  # reconnect with the web socket
+                        await self.web_socket_handler()  # reconnect with the web socket
+                    elif msg.tp == aiohttp.WSMsgType.error:
+                        await ws.close()
+                        await self.web_socket_handler()  # reconnect with the web socket
+        except aiohttp.client_exceptions.WSServerHandshakeError:
+            logging.error("Poloniex: WSServerHandshakeError, Reconnecting")
+            asyncio.sleep(1)  # 1 sec sleep before re-connecting again
+            await self.web_socket_handler()
 
 
     async def message_builder(self, msg):

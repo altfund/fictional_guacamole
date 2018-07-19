@@ -52,8 +52,10 @@ class DataFeed():
                         else:
                             await self.message_builder(msg.data)
                     elif msg.tp == aiohttp.WSMsgType.closed:
+                        await ws.close()
                         await self.web_socket_handler()  # reconnect with the web socket
                     elif msg.tp == aiohttp.WSMsgType.error:
+                        await ws.close()
                         await self.web_socket_handler()  # reconnect with the web socket
         except aiohttp.client_exceptions.WSServerHandshakeError:
             logging.error("GDAX: WSServerHandshakeError, Reconnecting")
