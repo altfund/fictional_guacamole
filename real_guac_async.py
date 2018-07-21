@@ -35,14 +35,12 @@ class DataFeed():
 
         self.db = Database(DATABASE['GDAX'], migrate=False)
         self.migrate = True
-        self.asyncio_loop = self.asyncio_loop or asyncio.get_event_loop()
-        self.aiohttp_session = aiohttp.ClientSession(loop=self.asyncio_loop)
 
     async def web_socket_handler(self):
         print("connecting with websocket")
         request_packet = self.get_request_packet()
         try:
-            async with self.aiohttp_session.ws_connect(self.url) as ws:
+            async with aiohttp.ClientSession().ws_connect(self.url) as ws:
                 await ws.send_json(request_packet)
                 async for msg in ws:
                     if msg.tp == aiohttp.WSMsgType.text:
@@ -111,12 +109,12 @@ class DataFeed():
 
                 await self.db.insert_into("gdax_order_book", data=row)
                 self.inside_order_books[product_id] = inside_order_book
-                print(row)
+                # print(row)
 
         if msg['type'] == 'match':
             product_id = msg['product_id']
             trades = [{
-                "server_datetime":datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S.%f%Z"),
+                "server_datetime":datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%f%Z"),
                 "exchange_datetime": msg['time'],
                 "sequence": msg['sequence'],
                 "trade_id": msg['trade_id'],
@@ -152,7 +150,7 @@ class DataFeed():
                         if missing_trade_id in product_trades_dict:
                             missing_product_trade = product_trades_dict[missing_trade_id]
                             missing_trade = {
-                                    "server_datetime":datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S.%f%Z"), #2017-10-15T05:10:53.700000Z
+                                    "server_datetime":datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%f%Z"), #2017-10-15T05:10:53.700000Z
                                     "exchange_datetime":missing_product_trade['time'],
                                     "sequence":"None",
                                     "trade_id":missing_product_trade['trade_id'],
