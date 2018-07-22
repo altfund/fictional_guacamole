@@ -1,6 +1,6 @@
 aiohttp==2.3.10
 aiosqlite==0.3.0
-async-timeout==2.0.1
+async-timeout
 asyncio==3.4.3
 bintrees==2.0.7
 ccxt==1.15.21
@@ -14,3 +14,4 @@ requests==2.18.4
 six==1.10.0
 websocket-client==0.40.0
 yarl==1.2.0
+arq

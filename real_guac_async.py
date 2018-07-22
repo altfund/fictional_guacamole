@@ -12,9 +12,10 @@ try:
 except:
     from logging_agent import logging
 
-
 from db_utils import Database
 from config import GDAX_PRODUCT_IDS, DATABASE
+from redis_worker import DBWorker
+
 
 
 class DataFeed():
@@ -32,9 +33,7 @@ class DataFeed():
             x: {"bids": {}, "asks": {}} for x in self.product_ids
         }
         self.last_trade_ids = {x: None for x in self.product_ids}
-
-        self.db = Database(DATABASE['GDAX'], migrate=False)
-        self.migrate = True
+        self.db_worker = DBWorker()
 
     async def web_socket_handler(self):
         print("connecting with websocket")
@@ -107,9 +106,8 @@ class DataFeed():
                 row.update(inside_bids)
                 row.update(inside_asks)
 
-                await self.db.insert_into("gdax_order_book", data=row)
+                await self.db_worker.insert_into_db(row, "gdax_order_book", exchange_name="GDAX")
                 self.inside_order_books[product_id] = inside_order_book
-                # print(row)
 
         if msg['type'] == 'match':
             product_id = msg['product_id']
@@ -179,7 +177,7 @@ class DataFeed():
                     logging.error("__________________________________________________________________")
 
             for trade in trades:
-                await self.db.insert_into("gdax_trades", trade)
+                await self.db_worker.insert_into_db(trade, "gdax_trades", exchange_name="GDAX")
                 print (trade)
 
     def get_request_packet(self):
@@ -192,8 +190,6 @@ class DataFeed():
         return request_packet
 
     async def subscribe_to_exchange(self):
-        if self.migrate:
-            await self.db.migrate()
         await self.web_socket_handler()
 
 

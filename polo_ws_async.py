@@ -4,13 +4,14 @@ import json
 
 import aiohttp
 
-from config import POLO_PRODUCT_IDS, DATABASE
-from db_utils import Database
+from config import POLO_PRODUCT_IDS
 
 try:
     from .logging_agent import logging
 except:
     from logging_agent import logging
+
+from redis_worker import DBWorker
 
 
 def sorting_key(dict_key):
@@ -28,16 +29,13 @@ class DataFeed():
         self.order_books = {x: {} for x in self.product_ids}
         self.inside_order_books = {x: {"bids": {}, "asks": {}} for x in self.product_ids}
         self.last_trade_ids = {x: None for x in self.product_ids}
+        self.db_worker = DBWorker()
 
-        self.db = Database(DATABASE['POLO'], migrate=False)
-        self.migrate = True
-        self.asyncio_loop = self.asyncio_loop or asyncio.get_event_loop()
-        self.aiohttp_session = aiohttp.ClientSession(loop=self.asyncio_loop)
 
     async def web_socket_handler(self):
         request_packets = self.get_request_packet()
         try:
-            async with self.aiohttp_session.ws_connect(self.url) as ws:
+            async with aiohttp.ClientSession().ws_connect(self.url) as ws:
                 for packet in request_packets:
                     await ws.send_json(packet)
                 async for msg in ws:
@@ -112,10 +110,9 @@ class DataFeed():
                         row.update(inside_bids)
                         row.update(inside_asks)
 
-                        await self.db.insert_into("polo_order_book", row)
-
+                        await self.db_worker.insert_into_db(row, "polo_order_book", exchange_name="POLO")
+                        # await self.db.insert_into("polo_order_book", row)
                         self.inside_order_books[self.product_codes[msg[0]]] = inside_order_book
-                        print(row)
 
                 elif message[0] == 't':
                     # TRADES
@@ -145,11 +142,11 @@ class DataFeed():
                         print("missed the following trades: " + str(missing_trade_ids))
 
                     for trade in trades:
-                        await self.db.insert_into("polo_trades", trade)
+                        # await self.db.insert_into("polo_trades", trade)
+                        await self.db_worker.insert_into_db(trade, "polo_trades", exchange_name="POLO")
                         print(trade)
         except IndexError:
             logging.error("Poloniex: Invalid Message {}".format(msg))
-
 
     def get_request_packet(self):
         packet_list = []
@@ -158,8 +155,6 @@ class DataFeed():
         return packet_list
 
     async def subscribe_to_exchange(self):
-        if self.migrate:
-            await self.db.migrate()
         await self.web_socket_handler()
 
 
