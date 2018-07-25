@@ -1,5 +1,6 @@
 import json
 import datetime
+import math
 
 import asyncio
 import aiohttp
@@ -131,15 +132,16 @@ class DataFeed():
             self.last_trade_ids[product_id] = msg["trade_id"]
             if current_trade_id > (last_trade_id + 1):
                 missing_trade_ids = list(range(last_trade_id + 1, current_trade_id))
+                number_of_request_required = math.ceil(len(missing_trade_ids) / 100)
                 print("missed the following trades: "+str(missing_trade_ids))
-                after_arg = None
+                after_arg = max(missing_trade_ids) + 1
                 recursive_count = 1
-                while missing_trade_ids and recursive_count < 4:
+                while missing_trade_ids and recursive_count <= number_of_request_required:
                     ccxt_product_id = product_id.replace("-", "/")
                     params = {}
                     if after_arg:
                         params = {'after': after_arg}
-                    product_trades = await self.public_client.fetch_trades(ccxt_product_id, params)
+                    product_trades = await self.public_client.fetch_trades(ccxt_product_id, params=params)
                     product_trades = [product_trade['info'] for product_trade in product_trades]
                     product_trades_dict = {}
                     for product_trade in product_trades:
