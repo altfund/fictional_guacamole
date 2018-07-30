@@ -7,6 +7,9 @@ import websocket
 from db_utils import Database
 from config import POLO_PRODUCT_IDS, DATABASE
 
+def sorting_key(dict_key):
+    return float(dict_key)
+
 
 class DataFeed():
 
@@ -35,7 +38,13 @@ class DataFeed():
         for message in msg[2]: #maybe will be better if current implementation doesn't work
             if message[0] == 'i':
                 print("got ob snapshot")
-                self.order_books[message[1]['currencyPair']] = {'bids':[[x, message[1]['orderBook'][1][x]] for x in message[1]['orderBook'][1]],'asks':[[x, message[1]['orderBook'][0][x]] for x in message[1]['orderBook'][0]]}
+                all_bids = message[1]['orderBook'][1]
+                all_asks = message[1]['orderBook'][0]
+                final_all_bids = [[x, all_bids[x]] for x in sorted(all_bids, key=sorting_key, reverse=True)]
+                final_all_asks = [[x, all_asks[x]] for x in sorted(all_asks, key=sorting_key)]
+                self.order_books[message[1]['currencyPair']] = {
+                    'bids': final_all_bids,
+                    'asks': final_all_asks}
                 self.product_codes[msg[0]] = message[1]['currencyPair']
             elif message[0] == 'o':
                 change_side = 'bids' if message[1]==1 else 'asks'
