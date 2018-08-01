@@ -6,11 +6,11 @@ POLO_PRODUCT_IDS = ["BTC_ETH", "BTC_XMR"]
 
 DATABASE = {
     "GDAX": {
-        "DATABASE": "websocket_data_2.db",
+        "DATABASE": "websocket_data_6.db",
         "SCHEMA": "schema/gdax_schema.sql",
     },
     "POLO": {
-        "DATABASE": "websocket_data_2.db",
+        "DATABASE": "websocket_data_6.db",
         "SCHEMA": "schema/polo_schema.sql",
     }
 }
